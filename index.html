@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#e94560">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/manifest.json">
   <title>ポモドーロタイマー</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -171,6 +174,37 @@
       <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
     </div>
   </div>
+
+  <div id="updateBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#0f3460;color:#eee;padding:12px 20px;display:none;justify-content:space-between;align-items:center;font-size:0.9rem;z-index:999;">
+    <span>新しいバージョンがあります</span>
+    <button id="updateBtn" style="background:#e94560;color:#fff;border:none;border-radius:8px;padding:6px 16px;cursor:pointer;font-weight:600;">更新</button>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      let pendingWorker = null;
+
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        reg.addEventListener('updatefound', () => {
+          const w = reg.installing;
+          w.addEventListener('statechange', () => {
+            if (w.state === 'installed' && navigator.serviceWorker.controller) {
+              pendingWorker = w;
+              document.getElementById('updateBanner').style.display = 'flex';
+            }
+          });
+        });
+      });
+
+      document.getElementById('updateBtn').addEventListener('click', () => {
+        if (pendingWorker) pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+      });
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+      });
+    }
+  </script>
 
   <script>
     const MODES = {
