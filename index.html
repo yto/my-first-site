@@ -2,9 +2,302 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>My First Page</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ポモドーロタイマー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #1a1a2e;
+      color: #eee;
+    }
+
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: #16213e;
+      border-radius: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      width: 360px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      letter-spacing: 0.1em;
+      margin-bottom: 28px;
+      color: #a0a0c0;
+      text-transform: uppercase;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 32px;
+      background: #0f3460;
+      border-radius: 12px;
+      padding: 4px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 8px 0;
+      border: none;
+      background: transparent;
+      color: #8888aa;
+      font-size: 0.8rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: #e94560;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .timer-ring {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    .timer-ring svg {
+      transform: rotate(-90deg);
+    }
+
+    .ring-bg { fill: none; stroke: #0f3460; stroke-width: 8; }
+    .ring-progress {
+      fill: none;
+      stroke: #e94560;
+      stroke-width: 8;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s linear, stroke 0.3s;
+    }
+
+    .timer-display {
+      position: absolute;
+      font-size: 3.5rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #fff;
+    }
+
+    .controls {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+
+    .btn {
+      padding: 12px 32px;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+
+    .btn:active { transform: scale(0.96); }
+
+    .btn-primary {
+      background: #e94560;
+      color: #fff;
+      min-width: 120px;
+    }
+
+    .btn-secondary {
+      background: #0f3460;
+      color: #8888aa;
+    }
+
+    .session-count {
+      font-size: 0.85rem;
+      color: #5555aa;
+    }
+
+    .dots {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #0f3460;
+      transition: background 0.3s;
+    }
+
+    .dot.done { background: #e94560; }
+  </style>
 </head>
 <body>
-  <p>Hello World!</p>
+  <div class="container">
+    <h1>Pomodoro Timer</h1>
+
+    <div class="tabs">
+      <button class="tab active" data-mode="work">作業</button>
+      <button class="tab" data-mode="short">短い休憩</button>
+      <button class="tab" data-mode="long">長い休憩</button>
+    </div>
+
+    <div class="timer-ring">
+      <svg width="200" height="200" viewBox="0 0 200 200">
+        <circle class="ring-bg" cx="100" cy="100" r="88"/>
+        <circle class="ring-progress" id="ring" cx="100" cy="100" r="88"/>
+      </svg>
+      <div class="timer-display" id="display">25:00</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-secondary" id="resetBtn">リセット</button>
+      <button class="btn btn-primary" id="startBtn">スタート</button>
+    </div>
+
+    <div class="session-count">セッション: <span id="sessionNum">1</span> / 4</div>
+    <div class="dots" id="dots">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+
+  <script>
+    const MODES = {
+      work:  { label: '作業',    minutes: 25, color: '#e94560' },
+      short: { label: '短い休憩', minutes: 5,  color: '#0f9b8e' },
+      long:  { label: '長い休憩', minutes: 15, color: '#2b6cb0' },
+    };
+
+    const CIRCUMFERENCE = 2 * Math.PI * 88;
+
+    let mode = 'work';
+    let totalSeconds = MODES.work.minutes * 60;
+    let remaining = totalSeconds;
+    let running = false;
+    let interval = null;
+    let sessions = 0;
+
+    const display  = document.getElementById('display');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const ring     = document.getElementById('ring');
+    const sessionNum = document.getElementById('sessionNum');
+    const dots     = document.getElementById('dots').querySelectorAll('.dot');
+
+    ring.style.strokeDasharray  = CIRCUMFERENCE;
+    ring.style.strokeDashoffset = 0;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function updateDisplay() {
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      display.textContent = `${pad(m)}:${pad(s)}`;
+      document.title = `${pad(m)}:${pad(s)} — ${MODES[mode].label}`;
+
+      const progress = remaining / totalSeconds;
+      ring.style.strokeDashoffset = CIRCUMFERENCE * progress;
+    }
+
+    function updateDots() {
+      dots.forEach((d, i) => d.classList.toggle('done', i < sessions));
+      sessionNum.textContent = (sessions % 4) + 1;
+    }
+
+    function switchMode(m) {
+      stop();
+      mode = m;
+      totalSeconds = MODES[m].minutes * 60;
+      remaining = totalSeconds;
+      ring.style.stroke = MODES[m].color;
+      document.querySelectorAll('.tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.mode === m)
+      );
+      document.querySelector('.btn-primary').style.background = MODES[m].color;
+      updateDisplay();
+    }
+
+    function start() {
+      running = true;
+      startBtn.textContent = '一時停止';
+      interval = setInterval(() => {
+        remaining--;
+        updateDisplay();
+        if (remaining <= 0) {
+          clearInterval(interval);
+          running = false;
+          startBtn.textContent = 'スタート';
+          onTimerEnd();
+        }
+      }, 1000);
+    }
+
+    function stop() {
+      clearInterval(interval);
+      running = false;
+      startBtn.textContent = 'スタート';
+    }
+
+    function reset() {
+      stop();
+      remaining = totalSeconds;
+      updateDisplay();
+    }
+
+    function onTimerEnd() {
+      if (mode === 'work') {
+        sessions = Math.min(sessions + 1, 4);
+        updateDots();
+        if (sessions === 4) {
+          sessions = 0;
+          updateDots();
+          notify('ポモドーロ4セッション完了！長い休憩を取りましょう。');
+          switchMode('long');
+        } else {
+          notify('作業終了！短い休憩を取りましょう。');
+          switchMode('short');
+        }
+      } else {
+        notify('休憩終了！次のポモドーロを始めましょう。');
+        switchMode('work');
+      }
+    }
+
+    function notify(msg) {
+      if (Notification.permission === 'granted') {
+        new Notification('ポモドーロタイマー', { body: msg });
+      } else {
+        alert(msg);
+      }
+    }
+
+    startBtn.addEventListener('click', () => {
+      running ? stop() : start();
+    });
+
+    resetBtn.addEventListener('click', reset);
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => switchMode(tab.dataset.mode));
+    });
+
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    updateDisplay();
+    updateDots();
+  </script>
 </body>
 </html>
