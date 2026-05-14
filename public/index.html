@@ -1,1 +1,289 @@
-Hello World!
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pomodoro Timer</title>
+  <style>
+    :root {
+      --work: #d97757;
+      --break: #5b8def;
+      --long: #6bbf59;
+      --bg: #faf9f6;
+      --fg: #2d2a26;
+      --muted: #8b857c;
+      --card: #ffffff;
+      --border: #e8e3da;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    main {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px 48px;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+
+    header {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    .mode-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .mode-btn:hover { color: var(--fg); }
+
+    .mode-btn.active {
+      color: var(--fg);
+      border-color: var(--border);
+      background: var(--bg);
+    }
+
+    .time {
+      font-size: 6rem;
+      font-weight: 200;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      margin: 16px 0 8px;
+      color: var(--accent, var(--work));
+    }
+
+    .label {
+      font-size: 0.9rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+
+    button.primary {
+      background: var(--accent, var(--work));
+      color: #fff;
+      border: none;
+      padding: 12px 36px;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      min-width: 130px;
+      transition: opacity 0.15s, transform 0.05s;
+    }
+
+    button.primary:hover { opacity: 0.9; }
+    button.primary:active { transform: translateY(1px); }
+
+    button.ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    button.ghost:hover { color: var(--fg); border-color: var(--muted); }
+
+    .progress {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--accent, var(--work));
+      width: 0%;
+      transition: width 0.5s linear;
+    }
+
+    footer {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    footer strong {
+      color: var(--fg);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <header>
+      <button class="mode-btn active" data-mode="work">作業</button>
+      <button class="mode-btn" data-mode="short">短い休憩</button>
+      <button class="mode-btn" data-mode="long">長い休憩</button>
+    </header>
+
+    <div class="time" id="time">25:00</div>
+    <div class="label" id="label">集中する時間</div>
+
+    <div class="progress"><div class="progress-bar" id="bar"></div></div>
+
+    <div class="actions">
+      <button class="primary" id="toggle">スタート</button>
+      <button class="ghost" id="reset">リセット</button>
+    </div>
+
+    <footer>
+      完了したポモドーロ: <strong id="count">0</strong>
+    </footer>
+  </main>
+
+  <script>
+    const MODES = {
+      work:  { duration: 25 * 60, label: '集中する時間',   color: 'var(--work)'  },
+      short: { duration: 5  * 60, label: '短い休憩',       color: 'var(--break)' },
+      long:  { duration: 15 * 60, label: '長い休憩',       color: 'var(--long)'  },
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const app = $('app');
+
+    let mode = 'work';
+    let remaining = MODES[mode].duration;
+    let timerId = null;
+    let completed = 0;
+
+    function applyMode(newMode) {
+      mode = newMode;
+      remaining = MODES[mode].duration;
+      app.style.setProperty('--accent', MODES[mode].color);
+      $('label').textContent = MODES[mode].label;
+      document.querySelectorAll('.mode-btn').forEach((b) => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      render();
+    }
+
+    function format(sec) {
+      const m = Math.floor(sec / 60).toString().padStart(2, '0');
+      const s = (sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function render() {
+      $('time').textContent = format(remaining);
+      const total = MODES[mode].duration;
+      const pct = ((total - remaining) / total) * 100;
+      $('bar').style.width = `${pct}%`;
+      $('count').textContent = completed;
+      document.title = `${format(remaining)} - ${MODES[mode].label}`;
+    }
+
+    function start() {
+      if (timerId) return;
+      $('toggle').textContent = '一時停止';
+      timerId = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          finish();
+        } else {
+          render();
+        }
+      }, 1000);
+    }
+
+    function pause() {
+      clearInterval(timerId);
+      timerId = null;
+      $('toggle').textContent = remaining === MODES[mode].duration ? 'スタート' : '再開';
+    }
+
+    function reset() {
+      pause();
+      remaining = MODES[mode].duration;
+      $('toggle').textContent = 'スタート';
+      render();
+    }
+
+    function finish() {
+      pause();
+      ding();
+      if (mode === 'work') {
+        completed++;
+        const next = completed % 4 === 0 ? 'long' : 'short';
+        notify(`お疲れさま！ ${MODES[next].label}に切り替えます`);
+        applyMode(next);
+      } else {
+        notify('休憩終了！次のポモドーロを始めましょう');
+        applyMode('work');
+      }
+      $('toggle').textContent = 'スタート';
+    }
+
+    function ding() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0.3, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        o.start();
+        o.stop(ctx.currentTime + 0.8);
+      } catch (e) {}
+    }
+
+    function notify(msg) {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Pomodoro Timer', { body: msg });
+      }
+    }
+
+    document.querySelectorAll('.mode-btn').forEach((b) => {
+      b.addEventListener('click', () => applyMode(b.dataset.mode));
+    });
+
+    $('toggle').addEventListener('click', () => {
+      timerId ? pause() : start();
+    });
+
+    $('reset').addEventListener('click', reset);
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    applyMode('work');
+  </script>
+</body>
+</html>
